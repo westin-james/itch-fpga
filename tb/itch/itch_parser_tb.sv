@@ -2,7 +2,7 @@
 
 module itch_parser_tb;
 
-    `include "itch_defs.svh"
+    import itch_event_pkg::*;
 
     localparam time CLOCK_PERIOD = 10ns;
 
@@ -15,6 +15,9 @@ module itch_parser_tb;
     localparam logic [63:0] TEST_STOCK           = "MSFT    ";
     localparam logic [31:0] TEST_PRICE           = 32'd4_125_000;
     localparam logic [31:0] TEST_MPID            = "TEST";
+    localparam logic [63:0] TEST_NEW_REFERENCE   = 64'h8877665544332211;
+    localparam logic [63:0] TEST_MATCH_NUMBER    = 64'hA1A2A3A4A5A6A7A8;
+    localparam logic [31:0] TEST_EXEC_PRICE      = 32'd4_124_500;
 
     logic clk;
     logic reset;
@@ -25,19 +28,10 @@ module itch_parser_tb;
     logic        data_last;
     logic [15:0] message_length;
 
-    logic        add_order_valid;
+    logic        event_valid;
+    itch_event_pkg::itch_event_t event_data;
     logic        unsupported_message;
     logic        parse_error;
-    logic [15:0] stock_locate;
-    logic [15:0] tracking_number;
-    logic [47:0] timestamp;
-    logic [63:0] order_reference;
-    logic [7:0]  side;
-    logic [31:0] shares;
-    logic [63:0] stock;
-    logic [31:0] price;
-    logic        has_mpid;
-    logic [31:0] mpid;
 
     integer errors;
     integer i;
@@ -50,19 +44,10 @@ module itch_parser_tb;
         .data_start          (data_start),
         .data_last           (data_last),
         .message_length      (message_length),
-        .add_order_valid     (add_order_valid),
+        .event_valid         (event_valid),
+        .event_data          (event_data),
         .unsupported_message (unsupported_message),
-        .parse_error         (parse_error),
-        .stock_locate        (stock_locate),
-        .tracking_number     (tracking_number),
-        .timestamp           (timestamp),
-        .order_reference     (order_reference),
-        .side                (side),
-        .shares              (shares),
-        .stock               (stock),
-        .price               (price),
-        .has_mpid            (has_mpid),
-        .mpid                (mpid)
+        .parse_error         (parse_error)
     );
 
     initial clk = 1'b0;
@@ -135,6 +120,28 @@ module itch_parser_tb;
         end
     endtask
 
+    task automatic drive_u64_last(input logic [63:0] value);
+        begin
+            drive_byte(value[63:56], 1'b0, 1'b0);
+            drive_byte(value[55:48], 1'b0, 1'b0);
+            drive_byte(value[47:40], 1'b0, 1'b0);
+            drive_byte(value[39:32], 1'b0, 1'b0);
+            drive_byte(value[31:24], 1'b0, 1'b0);
+            drive_byte(value[23:16], 1'b0, 1'b0);
+            drive_byte(value[15:8],  1'b0, 1'b0);
+            drive_byte(value[7:0],   1'b0, 1'b1);
+        end
+    endtask
+
+    task automatic send_order_header(input logic [7:0] message_type);
+        begin
+            drive_byte(message_type, 1'b1, 1'b0);
+            drive_u16(TEST_STOCK_LOCATE);
+            drive_u16(TEST_TRACKING_NUMBER);
+            drive_u48(TEST_TIMESTAMP);
+        end
+    endtask
+
     task automatic send_add_message(input logic [7:0] message_type);
         begin
             if (message_type == MSG_ORDER_ADD)
@@ -160,6 +167,57 @@ module itch_parser_tb;
 
             @(posedge clk);
             #1;
+        end
+    endtask
+
+    task automatic send_execute_message(
+        input logic [7:0] message_type,
+        input logic [15:0] supplied_length
+    );
+        begin
+            message_length = supplied_length;
+            send_order_header(message_type);
+            drive_u64(TEST_ORDER_REFERENCE);
+            drive_u32(TEST_SHARES, 1'b0);
+            if (message_type == MSG_ORDER_EXECUTED) begin
+                drive_u64_last(TEST_MATCH_NUMBER);
+            end else begin
+                drive_u64(TEST_MATCH_NUMBER);
+                drive_byte("Y", 1'b0, 1'b0);
+                drive_u32(TEST_EXEC_PRICE, 1'b1);
+            end
+            @(posedge clk); #1;
+        end
+    endtask
+
+    task automatic send_cancel_message(input logic [15:0] supplied_length);
+        begin
+            message_length = supplied_length;
+            send_order_header(MSG_ORDER_CANCEL);
+            drive_u64(TEST_ORDER_REFERENCE);
+            drive_u32(TEST_SHARES, 1'b1);
+            @(posedge clk); #1;
+        end
+    endtask
+
+    task automatic send_delete_message(input logic [15:0] supplied_length);
+        begin
+            message_length = supplied_length;
+            send_order_header(MSG_ORDER_DELETE);
+            drive_u64_last(TEST_ORDER_REFERENCE);
+            @(posedge clk); #1;
+        end
+    endtask
+
+    task automatic send_replace_message(input logic [15:0] supplied_length);
+        begin
+            message_length = supplied_length;
+            send_order_header(MSG_ORDER_REPLACE);
+            drive_u64(TEST_ORDER_REFERENCE);
+            drive_u64(TEST_NEW_REFERENCE);
+            drive_u32(TEST_SHARES, 1'b0);
+            drive_u32(TEST_PRICE, 1'b1);
+            @(posedge clk); #1;
         end
     endtask
 
@@ -196,14 +254,14 @@ module itch_parser_tb;
 
     task automatic check_add_fields;
         begin
-            check_value("stock_locate",    stock_locate,    TEST_STOCK_LOCATE);
-            check_value("tracking_number", tracking_number, TEST_TRACKING_NUMBER);
-            check_value("timestamp",       timestamp,       TEST_TIMESTAMP);
-            check_value("order_reference", order_reference, TEST_ORDER_REFERENCE);
-            check_value("side",            side,            TEST_SIDE);
-            check_value("shares",          shares,          TEST_SHARES);
-            check_value("stock",           stock,           TEST_STOCK);
-            check_value("price",           price,           TEST_PRICE);
+            check_value("stock_locate",    event_data.stock_locate,    TEST_STOCK_LOCATE);
+            check_value("tracking_number", event_data.tracking_number, TEST_TRACKING_NUMBER);
+            check_value("timestamp",       event_data.timestamp,       TEST_TIMESTAMP);
+            check_value("order_reference", event_data.order_reference, TEST_ORDER_REFERENCE);
+            check_value("side",            event_data.side,            TEST_SIDE);
+            check_value("shares",          event_data.shares,          TEST_SHARES);
+            check_value("stock",           event_data.stock,           TEST_STOCK);
+            check_value("price",           event_data.price,           TEST_PRICE);
         end
     endtask
 
@@ -231,36 +289,100 @@ module itch_parser_tb;
 
         $display("\nTEST 1: dispatcher routes A to itch_parser_add");
         send_add_message(MSG_ORDER_ADD);
-        check_value("add_order_valid",     add_order_valid,     1'b1);
+        check_value("event_valid",         event_valid,         1'b1);
+        check_value("event_type",          event_data.event_type, MSG_ORDER_ADD);
         check_value("unsupported_message", unsupported_message, 1'b0);
         check_value("parse_error",         parse_error,         1'b0);
         check_add_fields();
-        check_value("has_mpid", has_mpid, 1'b0);
+        check_value("has_mpid", event_data.has_mpid, 1'b0);
         idle_bus();
 
         $display("\nTEST 2: dispatcher safely consumes unsupported S message");
         send_unsupported_system_event();
-        check_value("add_order_valid",     add_order_valid,     1'b0);
         check_value("unsupported_message", unsupported_message, 1'b1);
         check_value("parse_error",         parse_error,         1'b0);
+        check_value("event_valid",         event_valid,         1'b0);
         idle_bus();
 
         $display("\nTEST 3: dispatcher returns to ADD route after unsupported message");
         send_add_message(MSG_ORDER_ADD_MPID);
-        check_value("add_order_valid",     add_order_valid,     1'b1);
+        check_value("event_type",          event_data.event_type, MSG_ORDER_ADD_MPID);
         check_value("unsupported_message", unsupported_message, 1'b0);
         check_value("parse_error",         parse_error,         1'b0);
         check_add_fields();
-        check_value("has_mpid", has_mpid, 1'b1);
-        check_value("mpid",     mpid,     TEST_MPID);
+        check_value("has_mpid", event_data.has_mpid, 1'b1);
+        check_value("mpid",     event_data.mpid,     TEST_MPID);
         idle_bus();
 
-        $display("\nTEST 4: byte arriving without data_start produces router error");
+        $display("\nTEST 4: dispatcher routes E and normalizes an execution");
+        send_execute_message(MSG_ORDER_EXECUTED, LEN_ORDER_EXECUTED);
+        check_value("event_valid",         event_valid,         1'b1);
+        check_value("event_type",          event_data.event_type, MSG_ORDER_EXECUTED);
+        check_value("order_reference",     event_data.order_reference, TEST_ORDER_REFERENCE);
+        check_value("shares",              event_data.shares, TEST_SHARES);
+        check_value("match_number",        event_data.match_number, TEST_MATCH_NUMBER);
+        check_value("has_execution_price", event_data.has_execution_price, 1'b0);
+        check_value("stock cleared",       event_data.stock, 64'b0);
+        check_value("side cleared",        event_data.side, 8'b0);
+        idle_bus();
+
+        $display("\nTEST 5: dispatcher routes C and preserves execution details");
+        send_execute_message(MSG_ORDER_EXECUTED_PRICE, LEN_ORDER_EXECUTED_PRICE);
+        check_value("event_type",          event_data.event_type, MSG_ORDER_EXECUTED_PRICE);
+        check_value("match_number",        event_data.match_number, TEST_MATCH_NUMBER);
+        check_value("has_execution_price", event_data.has_execution_price, 1'b1);
+        check_value("printable",           event_data.printable, "Y");
+        check_value("execution price",     event_data.price, TEST_EXEC_PRICE);
+        idle_bus();
+
+        $display("\nTEST 6: dispatcher routes X and maps canceled shares");
+        send_cancel_message(LEN_ORDER_CANCEL);
+        check_value("event_type",      event_data.event_type, MSG_ORDER_CANCEL);
+        check_value("order_reference", event_data.order_reference, TEST_ORDER_REFERENCE);
+        check_value("shares",          event_data.shares, TEST_SHARES);
+        check_value("price cleared",   event_data.price, 32'b0);
+        idle_bus();
+
+        $display("\nTEST 7: dispatcher routes D and clears unused payload fields");
+        send_delete_message(LEN_ORDER_DELETE);
+        check_value("event_type",      event_data.event_type, MSG_ORDER_DELETE);
+        check_value("order_reference", event_data.order_reference, TEST_ORDER_REFERENCE);
+        check_value("shares cleared",  event_data.shares, 32'b0);
+        check_value("price cleared",   event_data.price, 32'b0);
+        idle_bus();
+
+        $display("\nTEST 8: dispatcher routes U and normalizes both references");
+        send_replace_message(LEN_ORDER_REPLACE);
+        check_value("event_type",          event_data.event_type, MSG_ORDER_REPLACE);
+        check_value("order_reference",     event_data.order_reference, TEST_ORDER_REFERENCE);
+        check_value("new_order_reference", event_data.new_order_reference, TEST_NEW_REFERENCE);
+        check_value("shares",              event_data.shares, TEST_SHARES);
+        check_value("price",               event_data.price, TEST_PRICE);
+        idle_bus();
+
+        $display("\nTEST 9: modify parsers reject incorrect MoldUDP64 lengths");
+        send_execute_message(MSG_ORDER_EXECUTED, LEN_ORDER_EXECUTED - 1);
+        check_value("execute bad length valid", event_valid, 1'b0);
+        check_value("execute bad length error", parse_error, 1'b1);
+        idle_bus();
+        send_cancel_message(LEN_ORDER_CANCEL - 1);
+        check_value("cancel bad length valid", event_valid, 1'b0);
+        check_value("cancel bad length error", parse_error, 1'b1);
+        idle_bus();
+        send_delete_message(LEN_ORDER_DELETE - 1);
+        check_value("delete bad length valid", event_valid, 1'b0);
+        check_value("delete bad length error", parse_error, 1'b1);
+        idle_bus();
+        send_replace_message(LEN_ORDER_REPLACE - 1);
+        check_value("replace bad length valid", event_valid, 1'b0);
+        check_value("replace bad length error", parse_error, 1'b1);
+        idle_bus();
+
+        $display("\nTEST 10: byte arriving without data_start produces router error");
         message_length = 16'd1;
         drive_byte(8'hAA, 1'b0, 1'b1);
         @(posedge clk);
         #1;
-        check_value("add_order_valid",     add_order_valid,     1'b0);
         check_value("unsupported_message", unsupported_message, 1'b0);
         check_value("parse_error",         parse_error,         1'b1);
         idle_bus();

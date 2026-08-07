@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module itch_parser_add (
+module itch_parser_replace (
     input logic clk,
     input logic reset,
 
@@ -29,12 +29,12 @@ module itch_parser_add (
             captured_length <= 16'b0;
             parsing_message <= 1'b0;
 
-            event_valid     <= 1'b0;
-            parse_error     <= 1'b0;
-            event_data      <= '0;
+            event_valid <= 1'b0;
+            parse_error <= 1'b0;
+            event_data  <= '0;
         end else begin
-            event_valid     <= 1'b0;
-            parse_error     <= 1'b0;
+            event_valid <= 1'b0;
+            parse_error <= 1'b0;
 
             if (data_valid) begin
                 if (data_start) begin
@@ -45,7 +45,7 @@ module itch_parser_add (
 
                     event_data <= '0;
 
-                    if (data_in != MSG_ORDER_ADD && data_in != MSG_ORDER_ADD_MPID) begin
+                    if (data_in != MSG_ORDER_REPLACE) begin
                         parsing_message <= 1'b0;
                         parse_error <= 1'b1;
                     end
@@ -66,41 +66,29 @@ module itch_parser_add (
                         6'd11, 6'd12, 6'd13, 6'd14, 6'd15, 6'd16, 6'd17, 6'd18: 
                             event_data.order_reference <= {event_data.order_reference[55:0], data_in};
 
-                        // Byte 19: Buy/Sell Indicator
-                        6'd19: event_data.side <= data_in;
+                        // Bytes 19-26: Order Reference Number
+                        6'd19, 6'd20, 6'd21, 6'd22, 6'd23, 6'd24, 6'd25, 6'd26: 
+                            event_data.new_order_reference <= {event_data.new_order_reference[55:0], data_in};
 
-                        // Bytes 20-23: Shares
-                        6'd20, 6'd21, 6'd22, 6'd23:
+                        // Bytes 27-30: Shares
+                        6'd27, 6'd28, 6'd29, 6'd30:
                             event_data.shares <= {event_data.shares[23:0], data_in};
 
-                        // Bytes 24-31: Stock
-                        6'd24, 6'd25, 6'd26, 6'd27, 6'd28, 6'd29, 6'd30, 6'd31:
-                            event_data.stock <= {event_data.stock[55:0], data_in};
-
-                        // Bytes 32-35: Price
-                        6'd32, 6'd33, 6'd34, 6'd35:
+                        // Bytes 31-34: Price
+                        6'd31, 6'd32, 6'd33, 6'd34:
                             event_data.price <= {event_data.price[23:0], data_in};
 
-                        // Bytes 36-39: MPID Attribution, F Only
-                        6'd36, 6'd37, 6'd38, 6'd39:
-                            event_data.mpid <= {event_data.mpid[23:0], data_in};
                         default: begin
                         end
                     endcase
 
                     if (data_last) begin
                         parsing_message <= 1'b0;
-                        if (message_type == MSG_ORDER_ADD 
-                        && captured_length == LEN_ORDER_ADD 
-                        && byte_index == LEN_ORDER_ADD - 1) begin
+                        if (message_type == MSG_ORDER_REPLACE 
+                        && captured_length == LEN_ORDER_REPLACE 
+                        && byte_index == LEN_ORDER_REPLACE - 1) begin
                             event_valid <= 1'b1;
-                            event_data.event_type <= MSG_ORDER_ADD;
-                        end else if (message_type == MSG_ORDER_ADD_MPID
-                        && captured_length == LEN_ORDER_ADD_MPID
-                        && byte_index == LEN_ORDER_ADD_MPID - 1) begin
-                            event_valid <= 1'b1;
-                            event_data.event_type <= MSG_ORDER_ADD_MPID;
-                            event_data.has_mpid <= 1'b1;
+                            event_data.event_type <= MSG_ORDER_REPLACE;
                         end else begin
                             parse_error <= 1'b1;
                         end

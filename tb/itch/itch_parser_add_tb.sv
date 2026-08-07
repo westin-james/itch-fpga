@@ -2,7 +2,7 @@
 
 module itch_parser_add_tb;
 
-    `include "itch_defs.svh"
+    import itch_event_pkg::*;
 
     localparam time CLOCK_PERIOD = 10ns;
 
@@ -25,18 +25,9 @@ module itch_parser_add_tb;
     logic        data_last;
     logic [15:0] message_length;
 
-    logic        add_order_valid;
+    logic        event_valid;
+    itch_event_t event_data;
     logic        parse_error;
-    logic [15:0] stock_locate;
-    logic [15:0] tracking_number;
-    logic [47:0] timestamp;
-    logic [63:0] order_reference;
-    logic [7:0]  side;
-    logic [31:0] shares;
-    logic [63:0] stock;
-    logic [31:0] price;
-    logic        has_mpid;
-    logic [31:0] mpid;
 
     integer errors;
 
@@ -48,18 +39,9 @@ module itch_parser_add_tb;
         .data_start       (data_start),
         .data_last        (data_last),
         .message_length   (message_length),
-        .add_order_valid  (add_order_valid),
-        .parse_error      (parse_error),
-        .stock_locate     (stock_locate),
-        .tracking_number  (tracking_number),
-        .timestamp        (timestamp),
-        .order_reference  (order_reference),
-        .side             (side),
-        .shares           (shares),
-        .stock            (stock),
-        .price            (price),
-        .has_mpid         (has_mpid),
-        .mpid             (mpid)
+        .event_valid      (event_valid),
+        .event_data       (event_data),
+        .parse_error      (parse_error)
     );
 
     initial clk = 1'b0;
@@ -179,14 +161,14 @@ module itch_parser_add_tb;
 
     task automatic check_common_fields;
         begin
-            check_value("stock_locate",    stock_locate,    TEST_STOCK_LOCATE);
-            check_value("tracking_number", tracking_number, TEST_TRACKING_NUMBER);
-            check_value("timestamp",       timestamp,       TEST_TIMESTAMP);
-            check_value("order_reference", order_reference, TEST_ORDER_REFERENCE);
-            check_value("side",            side,            TEST_SIDE);
-            check_value("shares",          shares,          TEST_SHARES);
-            check_value("stock",           stock,           TEST_STOCK);
-            check_value("price",           price,           TEST_PRICE);
+            check_value("stock_locate",    event_data.stock_locate,    TEST_STOCK_LOCATE);
+            check_value("tracking_number", event_data.tracking_number, TEST_TRACKING_NUMBER);
+            check_value("timestamp",       event_data.timestamp,       TEST_TIMESTAMP);
+            check_value("order_reference", event_data.order_reference, TEST_ORDER_REFERENCE);
+            check_value("side",            event_data.side,            TEST_SIDE);
+            check_value("shares",          event_data.shares,          TEST_SHARES);
+            check_value("stock",           event_data.stock,           TEST_STOCK);
+            check_value("price",           event_data.price,           TEST_PRICE);
         end
     endtask
 
@@ -214,25 +196,27 @@ module itch_parser_add_tb;
 
         $display("\nTEST 1: valid 36-byte Add Order (A)");
         send_add_message(MSG_ORDER_ADD, LEN_ORDER_ADD);
-        check_value("add_order_valid", add_order_valid, 1'b1);
+        check_value("event_valid", event_valid, 1'b1);
+        check_value("event_type", event_data.event_type, MSG_ORDER_ADD);
         check_value("parse_error",     parse_error,     1'b0);
         check_common_fields();
-        check_value("has_mpid", has_mpid, 1'b0);
-        check_value("mpid",     mpid,     32'b0);
+        check_value("has_mpid", event_data.has_mpid, 1'b0);
+        check_value("mpid",     event_data.mpid,     32'b0);
         idle_bus();
 
         $display("\nTEST 2: valid 40-byte Add Order with MPID (F)");
         send_add_message(MSG_ORDER_ADD_MPID, LEN_ORDER_ADD_MPID);
-        check_value("add_order_valid", add_order_valid, 1'b1);
+        check_value("event_valid", event_valid, 1'b1);
+        check_value("event_type", event_data.event_type, MSG_ORDER_ADD_MPID);
         check_value("parse_error",     parse_error,     1'b0);
         check_common_fields();
-        check_value("has_mpid", has_mpid, 1'b1);
-        check_value("mpid",     mpid,     TEST_MPID);
+        check_value("has_mpid", event_data.has_mpid, 1'b1);
+        check_value("mpid",     event_data.mpid,     TEST_MPID);
         idle_bus();
 
         $display("\nTEST 3: A message with incorrect MoldUDP64 length");
         send_add_message(MSG_ORDER_ADD, LEN_ORDER_ADD - 1);
-        check_value("add_order_valid", add_order_valid, 1'b0);
+        check_value("event_valid", event_valid, 1'b0);
         check_value("parse_error",     parse_error,     1'b1);
         idle_bus();
 
