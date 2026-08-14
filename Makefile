@@ -11,9 +11,13 @@ PERIOD_NS ?= 10.000
 BUILD_DIR := build
 SIM_DIR   := $(BUILD_DIR)/itch
 WAVE_DIR  := $(BUILD_DIR)/waves/itch
+LOG_DIR   := $(BUILD_DIR)/logs
 RTL_DIR   := rtl/itch
 EVENT_RTL_DIR := rtl/event_fifo
+MOLDUDP64_RTL_DIR := rtl/moldudp64
 TB_DIR    := tb/itch
+EVENT_TB_DIR := tb/event_fifo
+MOLDUDP64_TB_DIR := tb/moldudp64
 IVFLAGS   := -g2012 -Wall -I. -I$(RTL_DIR)
 SYS_DEFS := rtl/sys_defs_pkg.sv
 RTL_SOURCES := $(RTL_DIR)/itch_event_pkg.sv \
@@ -27,49 +31,81 @@ EVENT_FIFO_SOURCES := $(EVENT_RTL_DIR)/wptr_handler.sv \
 	$(EVENT_RTL_DIR)/rptr_handler.sv \
 	$(EVENT_RTL_DIR)/fifo_mem.sv \
 	$(EVENT_RTL_DIR)/event_fifo.sv
+MOLDUDP64_SOURCES := $(MOLDUDP64_RTL_DIR)/moldudp64_pkg.sv \
+	$(MOLDUDP64_RTL_DIR)/moldudp64_decoder.sv
 PIPELINE_SOURCES := $(SYS_DEFS) \
 	$(RTL_SOURCES) \
 	$(EVENT_FIFO_SOURCES) \
 	rtl/itch_pipeline.sv
+TEST_TARGETS := test-add test-router test-event-fifo test-moldudp64 test-pipeline
 
-.PHONY: all test test-add test-router test-event-fifo test-pipeline lint synth-yosys timing-vivado clean
+.PHONY: all test test-add test-router test-event-fifo test-moldudp64 test-pipeline lint synth-yosys timing-vivado clean
 
-all: test-add test-router test-event-fifo test-pipeline
+all: test
 
-test: all
+test: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+	@passed=""; failed=""; \
+	for target in $(TEST_TARGETS); do \
+		if $(MAKE) --no-print-directory $$target 2>/dev/null; then \
+			passed="$$passed $$target"; \
+		else \
+			failed="$$failed $$target"; \
+		fi; \
+	done; \
+	printf '\nTest summary\n'; \
+	for target in $$passed; do printf '  PASSED  %s\n' "$$target"; done; \
+	for target in $$failed; do printf '  FAILED  %s\n' "$$target"; done; \
+	if [ -n "$$failed" ]; then \
+		printf '\nRESULT: FAILED\n'; \
+		exit 1; \
+	fi; \
+	printf '\nRESULT: PASSED\n'
 
-$(SIM_DIR) $(WAVE_DIR):
+$(SIM_DIR) $(WAVE_DIR) $(LOG_DIR):
 	mkdir -p $@
 
-test-add: $(SIM_DIR) $(WAVE_DIR)
-	$(IVERILOG) $(IVFLAGS) -s itch_parser_add_tb \
-		-o $(SIM_DIR)/itch_parser_add_tb.vvp \
+define RUN_SIM
+	@log="$(LOG_DIR)/$(1).log"; \
+	if { \
+		$(IVERILOG) $(IVFLAGS) -s $(2) \
+			-o $(SIM_DIR)/$(2).vvp $(3) && \
+		$(VVP) $(SIM_DIR)/$(2).vvp +VCD=$(WAVE_DIR)/$(2).vcd; \
+	} >"$$log" 2>&1; then \
+		printf '  PASSED  %-18s %s\n' "$(1)" "$$log"; \
+	else \
+		status=$$?; \
+		printf '  FAILED  %-18s %s\n' "$(1)" "$$log"; \
+		sed 's/^/    /' "$$log"; \
+		exit $$status; \
+	fi
+endef
+
+test-add: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+	$(call RUN_SIM,$@,itch_parser_add_tb,\
 		$(RTL_DIR)/itch_event_pkg.sv \
 		$(RTL_DIR)/itch_parser_add.sv \
-		$(TB_DIR)/itch_parser_add_tb.sv
-	$(VVP) $(SIM_DIR)/itch_parser_add_tb.vvp +VCD=$(WAVE_DIR)/itch_parser_add_tb.vcd
+		$(TB_DIR)/itch_parser_add_tb.sv)
 
-test-router: $(SIM_DIR) $(WAVE_DIR)
-	$(IVERILOG) $(IVFLAGS) -s itch_parser_tb \
-		-o $(SIM_DIR)/itch_parser_tb.vvp \
+test-router: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+	$(call RUN_SIM,$@,itch_parser_tb,\
 		$(RTL_SOURCES) \
-		$(TB_DIR)/itch_parser_tb.sv
-	$(VVP) $(SIM_DIR)/itch_parser_tb.vvp +VCD=$(WAVE_DIR)/itch_parser_tb.vcd
+		$(TB_DIR)/itch_parser_tb.sv)
 
-test-event-fifo: $(SIM_DIR) $(WAVE_DIR)
-	$(IVERILOG) $(IVFLAGS) -s event_fifo_tb \
-		-o $(SIM_DIR)/event_fifo_tb.vvp \
+test-event-fifo: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+	$(call RUN_SIM,$@,event_fifo_tb,\
 		$(RTL_DIR)/itch_event_pkg.sv \
 		$(EVENT_FIFO_SOURCES) \
-		$(TB_DIR)/event_fifo_tb.sv
-	$(VVP) $(SIM_DIR)/event_fifo_tb.vvp +VCD=$(WAVE_DIR)/event_fifo_tb.vcd
+		$(EVENT_TB_DIR)/event_fifo_tb.sv)
 
-test-pipeline: $(SIM_DIR) $(WAVE_DIR)
-	$(IVERILOG) $(IVFLAGS) -s itch_pipeline_tb \
-		-o $(SIM_DIR)/itch_pipeline_tb.vvp \
+test-moldudp64: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+	$(call RUN_SIM,$@,moldudp64_decoder_tb,\
+		$(MOLDUDP64_SOURCES) \
+		$(MOLDUDP64_TB_DIR)/moldudp64_decoder_tb.sv)
+
+test-pipeline: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+	$(call RUN_SIM,$@,itch_pipeline_tb,\
 		$(PIPELINE_SOURCES) \
-		$(TB_DIR)/itch_pipeline_tb.sv
-	$(VVP) $(SIM_DIR)/itch_pipeline_tb.vvp +VCD=$(WAVE_DIR)/itch_pipeline_tb.vcd
+		tb/itch_pipeline_tb.sv)
 
 lint:
 	$(VERILATOR) --lint-only --sv -Wall -Wno-fatal \
