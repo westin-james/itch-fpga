@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module itch_pipeline #(
+module pipeline #(
     parameter int unsigned EVENT_FIFO_DEPTH =
         sys_defs_pkg::EVENT_FIFO_DEPTH
 ) (
@@ -11,7 +11,7 @@ module itch_pipeline #(
     input logic        data_valid,
     input logic        data_start,
     input logic        data_last,
-    input logic [15:0] message_length,
+    input logic [15:0] expected_dest_port,
 
     input logic event_clk,
     input logic event_reset,
@@ -25,17 +25,56 @@ module itch_pipeline #(
     output logic fifo_overflow
 );
 
+    logic [7:0] udp_data;
+    logic udp_valid;
+    logic udp_start;
+    logic udp_last;
+
+    logic [7:0] itch_data;
+    logic itch_valid;
+    logic itch_start;
+    logic itch_last;
+    logic [15:0] itch_length;
+
     logic parser_event_valid;
     itch_event_pkg::itch_event_t parser_event_data;
+
+    udp_decoder udp (
+        .clk                (parser_clk),
+        .reset              (parser_reset),
+        .data_in            (data_in),
+        .ipv4_payload_valid (data_valid),
+        .ipv4_payload_start (data_start),
+        .ipv4_payload_last  (data_last),
+        .expected_dest_port (expected_dest_port),
+        .data_out           (udp_data),
+        .udp_payload_valid  (udp_valid),
+        .udp_payload_start  (udp_start),
+        .udp_payload_last   (udp_last)
+    );
+
+    moldudp64_decoder moldudp64 (
+        .clk               (parser_clk),
+        .reset             (parser_reset),
+        .data_in           (udp_data),
+        .udp_payload_valid (udp_valid),
+        .udp_payload_start (udp_start),
+        .udp_payload_last  (udp_last),
+        .data_out          (itch_data),
+        .itch_msg_valid    (itch_valid),
+        .itch_msg_start    (itch_start),
+        .itch_msg_last     (itch_last),
+        .itch_msg_length   (itch_length)
+    );
 
     itch_parser parser (
         .clk                 (parser_clk),
         .reset               (parser_reset),
-        .data_in             (data_in),
-        .data_valid          (data_valid),
-        .data_start          (data_start),
-        .data_last           (data_last),
-        .message_length      (message_length),
+        .data_in             (itch_data),
+        .data_valid          (itch_valid),
+        .data_start          (itch_start),
+        .data_last           (itch_last),
+        .message_length      (itch_length),
         .event_valid         (parser_event_valid),
         .event_data          (parser_event_data),
         .unsupported_message (unsupported_message),

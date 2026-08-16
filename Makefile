@@ -15,9 +15,11 @@ LOG_DIR   := $(BUILD_DIR)/logs
 RTL_DIR   := rtl/itch
 EVENT_RTL_DIR := rtl/event_fifo
 MOLDUDP64_RTL_DIR := rtl/moldudp64
+UDP_RTL_DIR := rtl/udp
 TB_DIR    := tb/itch
 EVENT_TB_DIR := tb/event_fifo
 MOLDUDP64_TB_DIR := tb/moldudp64
+UDP_TB_DIR := tb/udp
 IVFLAGS   := -g2012 -Wall -I. -I$(RTL_DIR)
 SYS_DEFS := rtl/sys_defs_pkg.sv
 RTL_SOURCES := $(RTL_DIR)/itch_event_pkg.sv \
@@ -33,15 +35,42 @@ EVENT_FIFO_SOURCES := $(EVENT_RTL_DIR)/wptr_handler.sv \
 	$(EVENT_RTL_DIR)/event_fifo.sv
 MOLDUDP64_SOURCES := $(MOLDUDP64_RTL_DIR)/moldudp64_pkg.sv \
 	$(MOLDUDP64_RTL_DIR)/moldudp64_decoder.sv
+UDP_SOURCES := $(UDP_RTL_DIR)/udp_pkg.sv \
+	$(UDP_RTL_DIR)/udp_decoder.sv
 PIPELINE_SOURCES := $(SYS_DEFS) \
+	$(UDP_SOURCES) \
+	$(MOLDUDP64_SOURCES) \
 	$(RTL_SOURCES) \
 	$(EVENT_FIFO_SOURCES) \
-	rtl/itch_pipeline.sv
-TEST_TARGETS := test-add test-router test-event-fifo test-moldudp64 test-pipeline
+	rtl/pipeline.sv
+TEST_TARGETS := test-add test-router test-event-fifo test-udp test-moldudp64 test-pipeline
 
-.PHONY: all test test-add test-router test-event-fifo test-moldudp64 test-pipeline lint synth-yosys timing-vivado clean
+.PHONY: all help test test-add test-router test-event-fifo test-udp test-moldudp64 test-pipeline lint synth-yosys timing-vivado clean
 
 all: test
+
+help:
+	@printf '%s\n' \
+		'ITCH FPGA parser build targets:' \
+		'' \
+		'  make test             Run the complete simulation suite' \
+		'  make test-add         Test the Add Order parser' \
+		'  make test-router      Test ITCH message routing and parsers' \
+		'  make test-event-fifo  Test the asynchronous event FIFO' \
+		'  make test-udp         Test the UDP decoder' \
+		'  make test-moldudp64   Test the MoldUDP64 decoder' \
+		'  make test-pipeline    Test the integrated decoding pipeline' \
+		'  make lint             Run Verilator lint checks' \
+		'  make synth-yosys      Synthesize TOP with Yosys' \
+		'  make timing-vivado    Run Vivado timing for PART' \
+		'  make clean            Remove generated build artifacts' \
+		'' \
+		'Common options:' \
+		'  TOP=<module>          Select synthesis top (default: itch_parser)' \
+		'  PART=<part>           Set the FPGA part for timing-vivado' \
+		'  PERIOD_NS=<ns>        Set the timing target (default: 10.000)' \
+		'  IVERILOG=<path>       Override a build tool (also VVP, VERILATOR,' \
+		'                       YOSYS, and VIVADO)'
 
 test: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
 	@passed=""; failed=""; \
@@ -102,10 +131,15 @@ test-moldudp64: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
 		$(MOLDUDP64_SOURCES) \
 		$(MOLDUDP64_TB_DIR)/moldudp64_decoder_tb.sv)
 
+test-udp: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+	$(call RUN_SIM,$@,udp_decoder_tb,\
+		$(UDP_SOURCES) \
+		$(UDP_TB_DIR)/udp_decoder.sv)
+
 test-pipeline: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
-	$(call RUN_SIM,$@,itch_pipeline_tb,\
+	$(call RUN_SIM,$@,pipeline_tb,\
 		$(PIPELINE_SOURCES) \
-		tb/itch_pipeline_tb.sv)
+		tb/pipeline.sv)
 
 lint:
 	$(VERILATOR) --lint-only --sv -Wall -Wno-fatal \
@@ -117,7 +151,7 @@ lint:
 		$(RTL_DIR)/itch_event_pkg.sv $(EVENT_FIFO_SOURCES)
 	$(VERILATOR) --lint-only --sv -Wall -Wno-fatal \
 		-Wno-EOFNEWLINE -Wno-UNUSEDPARAM -Wno-WIDTHEXPAND \
-		-I$(RTL_DIR) --top-module itch_pipeline $(PIPELINE_SOURCES)
+		-I$(RTL_DIR) --top-module pipeline $(PIPELINE_SOURCES)
 
 synth-yosys:
 	mkdir -p $(BUILD_DIR)/synth/yosys
