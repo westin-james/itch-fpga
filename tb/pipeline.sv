@@ -6,6 +6,7 @@ module pipeline_tb;
 
     localparam time PARSER_PERIOD = 10ns;
     localparam time EVENT_PERIOD  = 6ns;
+    localparam logic [47:0] EXPECTED_MAC = 48'h02_00_00_00_00_01;
     localparam logic [31:0] EXPECTED_IP = 32'hC0A8_0164;
     localparam logic [15:0] EXPECTED_PORT = 16'h1234;
 
@@ -34,7 +35,8 @@ module pipeline_tb;
     pipeline #(.EVENT_FIFO_DEPTH(8)) dut (
         .parser_clk(parser_clk), .parser_reset(parser_reset),
         .data_in(data_in), .data_valid(data_valid), .data_start(data_start),
-        .data_last(data_last), .expected_dest_ip(EXPECTED_IP),
+        .data_last(data_last), .expected_dest_mac(EXPECTED_MAC),
+        .expected_dest_ip(EXPECTED_IP),
         .expected_dest_port(EXPECTED_PORT),
         .event_clk(event_clk), .event_reset(event_reset),
         .event_valid(event_valid), .event_ready(event_ready), .event_data(event_data),
@@ -98,6 +100,22 @@ module pipeline_tb;
         end
     endtask
 
+    task automatic drive_ethernet_header(
+        input logic [47:0] dest_mac,
+        input logic [15:0] ethertype
+    );
+        integer byte_number;
+        begin
+            for (byte_number = 5; byte_number >= 0; byte_number = byte_number - 1)
+                drive_byte(dest_mac[byte_number*8 +: 8],
+                           byte_number == 5, 1'b0);
+            for (byte_number = 0; byte_number < 6; byte_number = byte_number + 1)
+                drive_byte(8'hA0 + byte_number[7:0], 1'b0, 1'b0);
+            drive_byte(ethertype[15:8], 1'b0, 1'b0);
+            drive_byte(ethertype[7:0], 1'b0, 1'b0);
+        end
+    endtask
+
     task automatic drive_ipv4_header(input logic [31:0] dest_ip);
         begin
             // 20-byte IPv4 header followed by the 66-byte UDP datagram.
@@ -149,7 +167,7 @@ module pipeline_tb;
         end
     endtask
 
-    task automatic drive_add_message;
+    task automatic drive_add_message(input logic last);
         begin
             drive_byte(8'h00, 1'b0, 1'b0);
             drive_byte(LEN_ORDER_ADD[7:0], 1'b0, 1'b0);
@@ -161,7 +179,7 @@ module pipeline_tb;
             drive_byte("B", 1'b0, 1'b0);
             drive_u32(TEST_SHARES, 1'b0);
             drive_u64(TEST_STOCK);
-            drive_u32(TEST_PRICE, 1'b1);
+            drive_u32(TEST_PRICE, last);
         end
     endtask
 
@@ -188,12 +206,41 @@ module pipeline_tb;
         parser_reset = 1'b0;
         event_reset = 1'b0;
 
+        // A valid IPv4 packet in an Ethernet frame for another MAC must not
+        // reach any downstream decoder.
+        drive_ethernet_header(48'h02_00_00_00_00_02, 16'h0800);
+        drive_ipv4_header(EXPECTED_IP);
+        drive_udp_header(EXPECTED_PORT);
+        drive_mold_header();
+        drive_add_message(1'b1);
+        drive_idle();
+        repeat (12) @(negedge event_clk);
+        if (event_valid) begin
+            $error("filtered Ethernet frame unexpectedly produced an event");
+            errors = errors + 1;
+        end
+
+        // A selected MAC carrying a non-IPv4 EtherType must also be rejected
+        // before the downstream protocol decoders.
+        drive_ethernet_header(EXPECTED_MAC, 16'h86DD);
+        drive_ipv4_header(EXPECTED_IP);
+        drive_udp_header(EXPECTED_PORT);
+        drive_mold_header();
+        drive_add_message(1'b1);
+        drive_idle();
+        repeat (12) @(negedge event_clk);
+        if (event_valid) begin
+            $error("non-IPv4 Ethernet frame unexpectedly produced an event");
+            errors = errors + 1;
+        end
+
         // A structurally valid packet for another IPv4 destination must not
         // reach the UDP, MoldUDP64, or ITCH stages.
+        drive_ethernet_header(EXPECTED_MAC, 16'h0800);
         drive_ipv4_header(32'hC0A8_0165);
         drive_udp_header(EXPECTED_PORT);
         drive_mold_header();
-        drive_add_message();
+        drive_add_message(1'b1);
         drive_idle();
         repeat (12) @(negedge event_clk);
         if (event_valid) begin
@@ -203,10 +250,11 @@ module pipeline_tb;
 
         // A selected IPv4 packet for another UDP port must not reach the
         // MoldUDP64 or ITCH stages.
+        drive_ethernet_header(EXPECTED_MAC, 16'h0800);
         drive_ipv4_header(EXPECTED_IP);
         drive_udp_header(16'h5678);
         drive_mold_header();
-        drive_add_message();
+        drive_add_message(1'b1);
         drive_idle();
         repeat (12) @(negedge event_clk);
         if (event_valid) begin
@@ -214,13 +262,17 @@ module pipeline_tb;
             errors = errors + 1;
         end
 
-        // Send the same MoldUDP64 message to the selected IP and port. Include
-        // an input-valid gap to exercise stream propagation through the pipeline.
+        // Send the same MoldUDP64 message to the selected MAC, IP, and port.
+        // Include an input-valid gap and Ethernet padding; the IPv4 length
+        // must stop padding from reaching the downstream protocol decoders.
+        drive_ethernet_header(EXPECTED_MAC, 16'h0800);
         drive_ipv4_header(EXPECTED_IP);
         drive_udp_header(EXPECTED_PORT);
         drive_mold_header();
         drive_idle();
-        drive_add_message();
+        drive_add_message(1'b0);
+        drive_byte(8'h00, 1'b0, 1'b0);
+        drive_byte(8'h00, 1'b0, 1'b1);
         drive_idle();
 
         cycles = 0;
@@ -254,7 +306,7 @@ module pipeline_tb;
         end
 
         if (errors == 0)
-            $display("PASS: IPv4-to-UDP-to-MoldUDP64-to-ITCH pipeline");
+            $display("PASS: Ethernet-to-IPv4-to-UDP-to-MoldUDP64-to-ITCH pipeline");
         else
             $fatal(1, "FAIL: pipeline (%0d errors)", errors);
 

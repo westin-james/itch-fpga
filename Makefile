@@ -17,11 +17,13 @@ EVENT_RTL_DIR := rtl/event_fifo
 MOLDUDP64_RTL_DIR := rtl/moldudp64
 UDP_RTL_DIR := rtl/udp
 IPV4_RTL_DIR := rtl/ipv4
+ETHERNET_RTL_DIR := rtl/ethernet
 TB_DIR    := tb/itch
 EVENT_TB_DIR := tb/event_fifo
 MOLDUDP64_TB_DIR := tb/moldudp64
 UDP_TB_DIR := tb/udp
 IPV4_TB_DIR := tb/ipv4
+ETHERNET_TB_DIR := tb/ethernet
 IVFLAGS   := -g2012 -Wall -I. -I$(RTL_DIR)
 SYS_DEFS := rtl/sys_defs_pkg.sv
 RTL_SOURCES := $(RTL_DIR)/itch_event_pkg.sv \
@@ -41,16 +43,19 @@ UDP_SOURCES := $(UDP_RTL_DIR)/udp_pkg.sv \
 	$(UDP_RTL_DIR)/udp_decoder.sv
 IPV4_SOURCES := $(IPV4_RTL_DIR)/ipv4_pkg.sv \
 	$(IPV4_RTL_DIR)/ipv4_decoder.sv
+ETHERNET_SOURCES := $(ETHERNET_RTL_DIR)/ethernet_pkg.sv \
+	$(ETHERNET_RTL_DIR)/ethernet_decoder.sv
 PIPELINE_SOURCES := $(SYS_DEFS) \
+	$(ETHERNET_SOURCES) \
 	$(IPV4_SOURCES) \
 	$(UDP_SOURCES) \
 	$(MOLDUDP64_SOURCES) \
 	$(RTL_SOURCES) \
 	$(EVENT_FIFO_SOURCES) \
 	rtl/pipeline.sv
-TEST_TARGETS := test-add test-router test-event-fifo test-ipv4 test-udp test-moldudp64 test-pipeline
+TEST_TARGETS := test-add test-router test-event-fifo test-ethernet test-ipv4 test-udp test-moldudp64 test-pipeline
 
-.PHONY: all help test test-add test-router test-event-fifo test-ipv4 test-udp test-moldudp64 test-pipeline lint synth-yosys timing-vivado clean
+.PHONY: all help test test-add test-router test-event-fifo test-ethernet test-ipv4 test-udp test-moldudp64 test-pipeline lint synth-yosys timing-vivado clean
 
 all: test
 
@@ -62,6 +67,7 @@ help:
 		'  make test-add         Test the Add Order parser' \
 		'  make test-router      Test ITCH message routing and parsers' \
 		'  make test-event-fifo  Test the asynchronous event FIFO' \
+		'  make test-ethernet    Test the Ethernet decoder' \
 		'  make test-ipv4        Test the IPv4 decoder' \
 		'  make test-udp         Test the UDP decoder' \
 		'  make test-moldudp64   Test the MoldUDP64 decoder' \
@@ -146,6 +152,11 @@ test-ipv4: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
 	$(call RUN_SIM,$@,ipv4_decoder_tb,\
 		$(IPV4_SOURCES) \
 		$(IPV4_TB_DIR)/ipv4_decoder.sv)
+
+test-ethernet: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+	$(call RUN_SIM,$@,ethernet_decoder_tb,\
+		$(ETHERNET_SOURCES) \
+		$(ETHERNET_TB_DIR)/ethernet_decoder.sv)
 
 test-pipeline: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
 	$(call RUN_SIM,$@,pipeline_tb,\

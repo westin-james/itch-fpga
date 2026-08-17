@@ -11,6 +11,7 @@ module pipeline #(
     input logic        data_valid,
     input logic        data_start,
     input logic        data_last,
+    input logic [47:0] expected_dest_mac,
     input logic [31:0] expected_dest_ip,
     input logic [15:0] expected_dest_port,
 
@@ -25,6 +26,11 @@ module pipeline #(
     output logic fifo_write_ready,
     output logic fifo_overflow
 );
+
+    logic [7:0] ethernet_data;
+    logic ethernet_valid;
+    logic ethernet_start;
+    logic ethernet_last;
 
     logic [7:0] ipv4_data;
     logic ipv4_valid;
@@ -45,13 +51,27 @@ module pipeline #(
     logic parser_event_valid;
     itch_event_pkg::itch_event_t parser_event_data;
 
-    ipv4_decoder ipv4 (
+    ethernet_decoder ethernet (
         .clk                    (parser_clk),
         .reset                  (parser_reset),
         .data_in                (data_in),
-        .ethernet_payload_valid (data_valid),
-        .ethernet_payload_start (data_start),
-        .ethernet_payload_last  (data_last),
+        .frame_valid            (data_valid),
+        .frame_start            (data_start),
+        .frame_last             (data_last),
+        .expected_dest_mac      (expected_dest_mac),
+        .data_out               (ethernet_data),
+        .ethernet_payload_valid (ethernet_valid),
+        .ethernet_payload_start (ethernet_start),
+        .ethernet_payload_last  (ethernet_last)
+    );
+
+    ipv4_decoder ipv4 (
+        .clk                    (parser_clk),
+        .reset                  (parser_reset),
+        .data_in                (ethernet_data),
+        .ethernet_payload_valid (ethernet_valid),
+        .ethernet_payload_start (ethernet_start),
+        .ethernet_payload_last  (ethernet_last),
         .expected_dest_ip       (expected_dest_ip),
         .data_out               (ipv4_data),
         .ipv4_payload_valid     (ipv4_valid),
