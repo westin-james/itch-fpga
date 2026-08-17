@@ -6,6 +6,7 @@ module pipeline_tb;
 
     localparam time PARSER_PERIOD = 10ns;
     localparam time EVENT_PERIOD  = 6ns;
+    localparam logic [31:0] EXPECTED_IP = 32'hC0A8_0164;
     localparam logic [15:0] EXPECTED_PORT = 16'h1234;
 
     localparam logic [15:0] TEST_STOCK_LOCATE = 16'h1234;
@@ -33,7 +34,8 @@ module pipeline_tb;
     pipeline #(.EVENT_FIFO_DEPTH(8)) dut (
         .parser_clk(parser_clk), .parser_reset(parser_reset),
         .data_in(data_in), .data_valid(data_valid), .data_start(data_start),
-        .data_last(data_last), .expected_dest_port(EXPECTED_PORT),
+        .data_last(data_last), .expected_dest_ip(EXPECTED_IP),
+        .expected_dest_port(EXPECTED_PORT),
         .event_clk(event_clk), .event_reset(event_reset),
         .event_valid(event_valid), .event_ready(event_ready), .event_data(event_data),
         .unsupported_message(unsupported_message), .parse_error(parse_error),
@@ -96,10 +98,36 @@ module pipeline_tb;
         end
     endtask
 
+    task automatic drive_ipv4_header(input logic [31:0] dest_ip);
+        begin
+            // 20-byte IPv4 header followed by the 66-byte UDP datagram.
+            drive_byte(8'h45, 1'b1, 1'b0);
+            drive_byte(8'h00, 1'b0, 1'b0);
+            drive_byte(8'h00, 1'b0, 1'b0);
+            drive_byte(8'd86, 1'b0, 1'b0);
+            drive_byte(8'h12, 1'b0, 1'b0);
+            drive_byte(8'h34, 1'b0, 1'b0);
+            drive_byte(8'h40, 1'b0, 1'b0);
+            drive_byte(8'h00, 1'b0, 1'b0);
+            drive_byte(8'd64, 1'b0, 1'b0);
+            drive_byte(8'd17, 1'b0, 1'b0);
+            drive_byte(8'h00, 1'b0, 1'b0);
+            drive_byte(8'h00, 1'b0, 1'b0);
+            drive_byte(8'h0A, 1'b0, 1'b0);
+            drive_byte(8'h00, 1'b0, 1'b0);
+            drive_byte(8'h00, 1'b0, 1'b0);
+            drive_byte(8'h01, 1'b0, 1'b0);
+            drive_byte(dest_ip[31:24], 1'b0, 1'b0);
+            drive_byte(dest_ip[23:16], 1'b0, 1'b0);
+            drive_byte(dest_ip[15:8], 1'b0, 1'b0);
+            drive_byte(dest_ip[7:0], 1'b0, 1'b0);
+        end
+    endtask
+
     task automatic drive_udp_header(input logic [15:0] dest_port);
         begin
             // 8 UDP header + 20 MoldUDP64 header + 2 length + 36-byte Add.
-            drive_byte(8'hAB, 1'b1, 1'b0);
+            drive_byte(8'hAB, 1'b0, 1'b0);
             drive_byte(8'hCD, 1'b0, 1'b0);
             drive_byte(dest_port[15:8], 1'b0, 1'b0);
             drive_byte(dest_port[7:0], 1'b0, 1'b0);
@@ -160,8 +188,22 @@ module pipeline_tb;
         parser_reset = 1'b0;
         event_reset = 1'b0;
 
-        // A structurally valid packet for another UDP port must not reach the
+        // A structurally valid packet for another IPv4 destination must not
+        // reach the UDP, MoldUDP64, or ITCH stages.
+        drive_ipv4_header(32'hC0A8_0165);
+        drive_udp_header(EXPECTED_PORT);
+        drive_mold_header();
+        drive_add_message();
+        drive_idle();
+        repeat (12) @(negedge event_clk);
+        if (event_valid) begin
+            $error("filtered IPv4 packet unexpectedly produced an event");
+            errors = errors + 1;
+        end
+
+        // A selected IPv4 packet for another UDP port must not reach the
         // MoldUDP64 or ITCH stages.
+        drive_ipv4_header(EXPECTED_IP);
         drive_udp_header(16'h5678);
         drive_mold_header();
         drive_add_message();
@@ -172,8 +214,9 @@ module pipeline_tb;
             errors = errors + 1;
         end
 
-        // Send the same MoldUDP64 message to the selected port. Include an
-        // input-valid gap to exercise stream propagation through the pipeline.
+        // Send the same MoldUDP64 message to the selected IP and port. Include
+        // an input-valid gap to exercise stream propagation through the pipeline.
+        drive_ipv4_header(EXPECTED_IP);
         drive_udp_header(EXPECTED_PORT);
         drive_mold_header();
         drive_idle();

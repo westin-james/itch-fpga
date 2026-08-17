@@ -11,6 +11,7 @@ module pipeline #(
     input logic        data_valid,
     input logic        data_start,
     input logic        data_last,
+    input logic [31:0] expected_dest_ip,
     input logic [15:0] expected_dest_port,
 
     input logic event_clk,
@@ -24,6 +25,11 @@ module pipeline #(
     output logic fifo_write_ready,
     output logic fifo_overflow
 );
+
+    logic [7:0] ipv4_data;
+    logic ipv4_valid;
+    logic ipv4_start;
+    logic ipv4_last;
 
     logic [7:0] udp_data;
     logic udp_valid;
@@ -39,13 +45,27 @@ module pipeline #(
     logic parser_event_valid;
     itch_event_pkg::itch_event_t parser_event_data;
 
+    ipv4_decoder ipv4 (
+        .clk                    (parser_clk),
+        .reset                  (parser_reset),
+        .data_in                (data_in),
+        .ethernet_payload_valid (data_valid),
+        .ethernet_payload_start (data_start),
+        .ethernet_payload_last  (data_last),
+        .expected_dest_ip       (expected_dest_ip),
+        .data_out               (ipv4_data),
+        .ipv4_payload_valid     (ipv4_valid),
+        .ipv4_payload_start     (ipv4_start),
+        .ipv4_payload_last      (ipv4_last)
+    );
+
     udp_decoder udp (
         .clk                (parser_clk),
         .reset              (parser_reset),
-        .data_in            (data_in),
-        .ipv4_payload_valid (data_valid),
-        .ipv4_payload_start (data_start),
-        .ipv4_payload_last  (data_last),
+        .data_in            (ipv4_data),
+        .ipv4_payload_valid (ipv4_valid),
+        .ipv4_payload_start (ipv4_start),
+        .ipv4_payload_last  (ipv4_last),
         .expected_dest_port (expected_dest_port),
         .data_out           (udp_data),
         .udp_payload_valid  (udp_valid),
