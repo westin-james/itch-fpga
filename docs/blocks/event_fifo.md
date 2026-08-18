@@ -65,12 +65,12 @@ Critical paths and memory implementation should be determined from synthesis and
 
 ## File Structure
 
-- `rtl/event_fifo/event_fifo.sv` connects memory, pointers, synchronizers, and interfaces.
-- `rtl/event_fifo/fifo_mem.sv` stores `itch_event_t` records and provides first-word fall-through data.
-- `rtl/event_fifo/wptr_handler.sv` advances write pointers and detects full.
-- `rtl/event_fifo/rptr_handler.sv` advances read pointers and detects empty.
-- `rtl/pipeline.sv` connects the parser to the write side and exposes the read side.
-- `tb/event_fifo/event_fifo_tb.sv` tests asynchronous ordering, full behavior, and overflow.
+- `rtl/event/event_fifo/event_fifo.sv` connects memory, pointers, synchronizers, and interfaces.
+- `rtl/event/event_fifo/fifo_mem.sv` stores `itch_event_t` records and provides first-word fall-through data.
+- `rtl/event/event_fifo/wptr_handler.sv` advances write pointers and detects full.
+- `rtl/event/event_fifo/rptr_handler.sv` advances read pointers and detects empty.
+- `rtl/top/pipeline.sv` connects the parser to the write side and exposes the read side.
+- `tb/event/event_fifo/event_fifo_tb.sv` tests asynchronous ordering, full behavior, and overflow.
 
 ## References
 

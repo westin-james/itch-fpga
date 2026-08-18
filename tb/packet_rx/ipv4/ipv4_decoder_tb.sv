@@ -135,7 +135,7 @@ module ipv4_decoder_tb;
         string vcd_path;
 
         if (!$value$plusargs("VCD=%s", vcd_path))
-            vcd_path = "build/waves/itch/ipv4_decoder_tb.vcd";
+            vcd_path = "build/sim/test-ipv4/ipv4_decoder_tb.vcd";
         $dumpfile(vcd_path);
         $dumpvars(0, ipv4_decoder_tb);
 

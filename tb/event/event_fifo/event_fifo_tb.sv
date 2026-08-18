@@ -66,7 +66,7 @@ module event_fifo_tb;
     initial begin
         string vcd_path;
         if (!$value$plusargs("VCD=%s", vcd_path))
-            vcd_path = "build/waves/itch/event_fifo_tb.vcd";
+            vcd_path = "build/sim/test-event-fifo/event_fifo_tb.vcd";
         $dumpfile(vcd_path);
         $dumpvars(0, event_fifo_tb);
 

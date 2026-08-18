@@ -9,23 +9,21 @@ PART      ?=
 PERIOD_NS ?= 10.000
 
 BUILD_DIR := build
-SIM_DIR   := $(BUILD_DIR)/itch
-WAVE_DIR  := $(BUILD_DIR)/waves/itch
-LOG_DIR   := $(BUILD_DIR)/logs
-RTL_DIR   := rtl/itch
-EVENT_RTL_DIR := rtl/event_fifo
-MOLDUDP64_RTL_DIR := rtl/moldudp64
-UDP_RTL_DIR := rtl/udp
-IPV4_RTL_DIR := rtl/ipv4
-ETHERNET_RTL_DIR := rtl/ethernet
-TB_DIR    := tb/itch
-EVENT_TB_DIR := tb/event_fifo
-MOLDUDP64_TB_DIR := tb/moldudp64
-UDP_TB_DIR := tb/udp
-IPV4_TB_DIR := tb/ipv4
-ETHERNET_TB_DIR := tb/ethernet
+SIM_DIR   := $(BUILD_DIR)/sim
+RTL_DIR   := rtl/event/itch
+EVENT_RTL_DIR := rtl/event/event_fifo
+MOLDUDP64_RTL_DIR := rtl/packet_rx/moldudp64
+UDP_RTL_DIR := rtl/packet_rx/udp
+IPV4_RTL_DIR := rtl/packet_rx/ipv4
+ETHERNET_RTL_DIR := rtl/packet_rx/ethernet
+TB_DIR    := tb/event/itch
+EVENT_TB_DIR := tb/event/event_fifo
+MOLDUDP64_TB_DIR := tb/packet_rx/moldudp64
+UDP_TB_DIR := tb/packet_rx/udp
+IPV4_TB_DIR := tb/packet_rx/ipv4
+ETHERNET_TB_DIR := tb/packet_rx/ethernet
 IVFLAGS   := -g2012 -Wall -I. -I$(RTL_DIR)
-SYS_DEFS := rtl/sys_defs_pkg.sv
+SYS_DEFS := rtl/common/sys_defs_pkg.sv
 RTL_SOURCES := $(RTL_DIR)/itch_event_pkg.sv \
 	$(RTL_DIR)/itch_parser_add.sv \
 	$(RTL_DIR)/itch_parser_execute.sv \
@@ -52,7 +50,7 @@ PIPELINE_SOURCES := $(SYS_DEFS) \
 	$(MOLDUDP64_SOURCES) \
 	$(RTL_SOURCES) \
 	$(EVENT_FIFO_SOURCES) \
-	rtl/pipeline.sv
+	rtl/top/pipeline.sv
 TEST_TARGETS := test-add test-router test-event-fifo test-ethernet test-ipv4 test-udp test-moldudp64 test-pipeline
 
 .PHONY: all help test test-add test-router test-event-fifo test-ethernet test-ipv4 test-udp test-moldudp64 test-pipeline lint synth-yosys timing-vivado clean
@@ -84,7 +82,7 @@ help:
 		'  IVERILOG=<path>       Override a build tool (also VVP, VERILATOR,' \
 		'                       YOSYS, and VIVADO)'
 
-test: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+test: | $(SIM_DIR)
 	@passed=""; failed=""; \
 	for target in $(TEST_TARGETS); do \
 		if $(MAKE) --no-print-directory $$target 2>/dev/null; then \
@@ -102,15 +100,17 @@ test: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
 	fi; \
 	printf '\nRESULT: PASSED\n'
 
-$(SIM_DIR) $(WAVE_DIR) $(LOG_DIR):
+$(SIM_DIR):
 	mkdir -p $@
 
 define RUN_SIM
-	@log="$(LOG_DIR)/$(1).log"; \
+	@out="$(SIM_DIR)/$(1)"; \
+	mkdir -p "$$out"; \
+	log="$$out/run.log"; \
 	if { \
 		$(IVERILOG) $(IVFLAGS) -s $(2) \
-			-o $(SIM_DIR)/$(2).vvp $(3) && \
-		$(VVP) $(SIM_DIR)/$(2).vvp +VCD=$(WAVE_DIR)/$(2).vcd; \
+			-o "$$out/$(2).vvp" $(3) && \
+		$(VVP) "$$out/$(2).vvp" +VCD="$$out/$(2).vcd"; \
 	} >"$$log" 2>&1; then \
 		printf '  PASSED  %-18s %s\n' "$(1)" "$$log"; \
 	else \
@@ -121,47 +121,47 @@ define RUN_SIM
 	fi
 endef
 
-test-add: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+test-add: | $(SIM_DIR)
 	$(call RUN_SIM,$@,itch_parser_add_tb,\
 		$(RTL_DIR)/itch_event_pkg.sv \
 		$(RTL_DIR)/itch_parser_add.sv \
 		$(TB_DIR)/itch_parser_add_tb.sv)
 
-test-router: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+test-router: | $(SIM_DIR)
 	$(call RUN_SIM,$@,itch_parser_tb,\
 		$(RTL_SOURCES) \
 		$(TB_DIR)/itch_parser_tb.sv)
 
-test-event-fifo: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+test-event-fifo: | $(SIM_DIR)
 	$(call RUN_SIM,$@,event_fifo_tb,\
 		$(RTL_DIR)/itch_event_pkg.sv \
 		$(EVENT_FIFO_SOURCES) \
 		$(EVENT_TB_DIR)/event_fifo_tb.sv)
 
-test-moldudp64: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+test-moldudp64: | $(SIM_DIR)
 	$(call RUN_SIM,$@,moldudp64_decoder_tb,\
 		$(MOLDUDP64_SOURCES) \
 		$(MOLDUDP64_TB_DIR)/moldudp64_decoder_tb.sv)
 
-test-udp: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+test-udp: | $(SIM_DIR)
 	$(call RUN_SIM,$@,udp_decoder_tb,\
 		$(UDP_SOURCES) \
-		$(UDP_TB_DIR)/udp_decoder.sv)
+		$(UDP_TB_DIR)/udp_decoder_tb.sv)
 
-test-ipv4: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+test-ipv4: | $(SIM_DIR)
 	$(call RUN_SIM,$@,ipv4_decoder_tb,\
 		$(IPV4_SOURCES) \
-		$(IPV4_TB_DIR)/ipv4_decoder.sv)
+		$(IPV4_TB_DIR)/ipv4_decoder_tb.sv)
 
-test-ethernet: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+test-ethernet: | $(SIM_DIR)
 	$(call RUN_SIM,$@,ethernet_decoder_tb,\
 		$(ETHERNET_SOURCES) \
-		$(ETHERNET_TB_DIR)/ethernet_decoder.sv)
+		$(ETHERNET_TB_DIR)/ethernet_decoder_tb.sv)
 
-test-pipeline: | $(SIM_DIR) $(WAVE_DIR) $(LOG_DIR)
+test-pipeline: | $(SIM_DIR)
 	$(call RUN_SIM,$@,pipeline_tb,\
 		$(PIPELINE_SOURCES) \
-		tb/pipeline.sv)
+		tb/top/pipeline_tb.sv)
 
 lint:
 	$(VERILATOR) --lint-only --sv -Wall -Wno-fatal \
@@ -185,9 +185,9 @@ timing-vivado:
 		echo "error: set an exact FPGA part, for example: make timing-vivado PART=xc7a35tcsg324-1"; \
 		exit 2; \
 	}
-	mkdir -p $(BUILD_DIR)/synth/vivado
-	TOP=$(TOP) PART=$(PART) PERIOD_NS=$(PERIOD_NS) OUT_DIR=$(abspath $(BUILD_DIR)/synth/vivado) \
-		$(VIVADO) -mode batch -nojournal -nolog -source scripts/vivado_timing.tcl
+	mkdir -p $(BUILD_DIR)/pnr/vivado
+	TOP=$(TOP) PART=$(PART) PERIOD_NS=$(PERIOD_NS) OUT_DIR=$(abspath $(BUILD_DIR)/pnr/vivado) \
+		$(VIVADO) -mode batch -nojournal -nolog -source scripts/vivado/timing.tcl
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -59,9 +59,9 @@ The actual critical path should be determined from synthesis and place-and-route
 
 ## File Structure
 
-- `rtl/udp/udp_pkg.sv` defines the UDP header record and decoder states.
-- `rtl/udp/udp_decoder.sv` parses, filters, and emits the bounded payload stream.
-- `tb/udp/udp_decoder.sv` tests filtering, valid gaps, lengths, truncation, padding, and packet boundaries.
+- `rtl/packet_rx/udp/udp_pkg.sv` defines the UDP header record and decoder states.
+- `rtl/packet_rx/udp/udp_decoder.sv` parses, filters, and emits the bounded payload stream.
+- `tb/packet_rx/udp/udp_decoder_tb.sv` tests filtering, valid gaps, lengths, truncation, padding, and packet boundaries.
 
 ## References
 

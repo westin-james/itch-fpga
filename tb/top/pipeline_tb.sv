@@ -188,7 +188,7 @@ module pipeline_tb;
         integer cycles;
 
         if (!$value$plusargs("VCD=%s", vcd_path))
-            vcd_path = "build/waves/itch/pipeline_tb.vcd";
+            vcd_path = "build/sim/test-pipeline/pipeline_tb.vcd";
         $dumpfile(vcd_path);
         $dumpvars(0, pipeline_tb);
 

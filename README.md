@@ -24,7 +24,7 @@ multiplexes those records without maintaining a second flattened interface.
 
 Shared message identifiers, message lengths, and the packed event record live
 in `itch_event_pkg`. The parser emits `itch_event_pkg::itch_event_t event_data`.
-System-wide architectural defaults live in `rtl/sys_defs_pkg.sv` and are used
+System-wide architectural defaults live in `rtl/common/sys_defs_pkg.sv` and are used
 with fully qualified names as overridable module-parameter defaults. Each
 definition documents its constraints and consumers so references remain easy
 to trace.
@@ -79,10 +79,10 @@ make timing-vivado PART=xc7a35tcsg324-1 PERIOD_NS=10.000
 This runs a non-project, out-of-context Vivado flow: synthesis, placement,
 physical optimization, routing, then static timing analysis. Results are in:
 
-- `build/synth/vivado/fmax_summary.txt` — WNS and an estimated Fmax
-- `build/synth/vivado/timing_summary.rpt` — detailed timing paths and checks
-- `build/synth/vivado/utilization.rpt` — device resource use
-- `build/synth/vivado/itch_parser_<part>.dcp` — routed checkpoint
+- `build/pnr/vivado/fmax_summary.txt` — WNS and an estimated Fmax
+- `build/pnr/vivado/timing_summary.rpt` — detailed timing paths and checks
+- `build/pnr/vivado/utilization.rpt` — device resource use
+- `build/pnr/vivado/itch_parser_<part>.dcp` — routed checkpoint
 
 `PERIOD_NS` is the timing target, not a claim about achievable speed. Start at
 10 ns (100 MHz), inspect the result, and rerun near the estimated critical

@@ -269,7 +269,7 @@ module itch_parser_tb;
         string vcd_path;
 
         if (!$value$plusargs("VCD=%s", vcd_path)) begin
-            vcd_path = "build/waves/itch/itch_parser_tb.vcd";
+            vcd_path = "build/sim/test-router/itch_parser_tb.vcd";
         end
 
         $dumpfile(vcd_path);

@@ -66,12 +66,12 @@ The actual critical path should be determined from synthesis and place-and-route
 
 ## File Structure
 
-- `rtl/itch/itch_event_pkg.sv` defines identifiers, lengths, and the event record.
-- `rtl/itch/itch_parser.sv` dispatches messages and multiplexes events.
-- `rtl/itch/itch_parser_add.sv` decodes `A` and `F`.
-- `rtl/itch/itch_parser_execute.sv` decodes `E` and `C`.
-- `rtl/itch/itch_parser_cancel.sv`, `rtl/itch/itch_parser_delete.sv`, and `rtl/itch/itch_parser_replace.sv` decode `X`, `D`, and `U`.
-- `tb/itch/itch_parser_tb.sv` tests routing, normalized fields, unsupported messages, bad lengths, and routing errors.
+- `rtl/event/itch/itch_event_pkg.sv` defines identifiers, lengths, and the event record.
+- `rtl/event/itch/itch_parser.sv` dispatches messages and multiplexes events.
+- `rtl/event/itch/itch_parser_add.sv` decodes `A` and `F`.
+- `rtl/event/itch/itch_parser_execute.sv` decodes `E` and `C`.
+- `rtl/event/itch/itch_parser_cancel.sv`, `rtl/event/itch/itch_parser_delete.sv`, and `rtl/event/itch/itch_parser_replace.sv` decode `X`, `D`, and `U`.
+- `tb/event/itch/itch_parser_tb.sv` tests routing, normalized fields, unsupported messages, bad lengths, and routing errors.
 
 ## References
 

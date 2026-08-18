@@ -60,9 +60,9 @@ The actual critical path should be determined from synthesis and place-and-route
 
 ## File Structure
 
-- `rtl/moldudp64/moldudp64_pkg.sv` defines constants, the header record, and decoder states.
-- `rtl/moldudp64/moldudp64_decoder.sv` removes framing and emits individual ITCH messages.
-- `tb/moldudp64/moldudp64_decoder_tb.sv` tests two messages in one MoldUDP64 packet.
+- `rtl/packet_rx/moldudp64/moldudp64_pkg.sv` defines constants, the header record, and decoder states.
+- `rtl/packet_rx/moldudp64/moldudp64_decoder.sv` removes framing and emits individual ITCH messages.
+- `tb/packet_rx/moldudp64/moldudp64_decoder_tb.sv` tests two messages in one MoldUDP64 packet.
 
 ## References
 

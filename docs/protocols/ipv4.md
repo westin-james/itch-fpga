@@ -60,9 +60,9 @@ Potential timing-sensitive logic includes the packet-acceptance checks, particul
 
 ## File Structure
 
-- `rtl/ipv4/ipv4_pkg.sv` defines IPv4 constants, header fields, and decoder states.
-- `rtl/ipv4/ipv4_decoder.sv` parses and filters IPv4 packets.
-- `tb/ipv4/ipv4_decoder.sv` tests the decoder.
+- `rtl/packet_rx/ipv4/ipv4_pkg.sv` defines IPv4 constants, header fields, and decoder states.
+- `rtl/packet_rx/ipv4/ipv4_decoder.sv` parses and filters IPv4 packets.
+- `tb/packet_rx/ipv4/ipv4_decoder_tb.sv` tests the decoder.
 
 ## References
 
